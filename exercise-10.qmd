@@ -1,0 +1,58 @@
+---
+title: "Exercise-10"
+format: html
+editor: visual
+---
+
+# **Exercise 10**
+
+## **Practice ANOVA**
+
+First I am going to load the necessary libraries we may need (identified from the previous class which we did this same exercise)
+
+```{r}
+library(tidyverse)
+library(skimr)
+library(broom)
+library(infer)
+library(emmeans)
+library(sjPlot)
+```
+
+First, loading the ANOVET dataset,
+
+```{r}
+
+f <- "https://raw.githubusercontent.com/difiore/ada-datasets/main/AVONETdataset1.csv"
+d <- read_csv(f)
+```
+
+I am first going to extract only the mentioned variables, which are : **Species1**, **Family1**, **Order1**, **Beak.Length_Culmen**, **Beak.Width**, **Beak.Depth**, **Tarsus.Length**, **Wing.Length**, **Tail.Length**, **Mass**, **Habitat**, **Migration**, **Trophic.Level**, **Trophic.Niche**, **Min.Latitude**, **Max.Latitude**, **Centroid.Latitude**, **Primary.Lifestyle**, and **Range.Size**
+
+```{r}
+d <- d %>%
+  select(
+    Species1, Family1, Order1,
+    Beak.Length_Culmen, Beak.Width, Beak.Depth,
+    Tarsus.Length, Wing.Length, Tail.Length, Mass,
+    Habitat, Migration, Trophic.Level, Trophic.Niche,
+    Min.Latitude, Max.Latitude, Centroid.Latitude,
+    Primary.Lifestyle, Range.Size
+  )
+d
+```
+
+Now, I am going to do a bit of exploratory data analysis with this dataset. I will use skim() which gives quick descriptive statistics and missingness.And, glimpse() which helps identify variable classes.
+
+```{r}
+skim(d)
+glimpse(d)
+```
+
+So from above, using glimpse(), i can see which of the variables are categorical and which are numeric,
+
+Categorical variables: Species1, Family1, Order1, Habitat, Trophic.Level,Trophic.Niche,Primary.Lifestyle, Migration (stored numerically, but conceptually categorical)
+
+Numeric variables: Beak.Length_Culmen, Beak.Width, Beak.Depth,Tarsus.Length,Wing.Length,Tail.Length, Mass, Min.Latitude, Max.Latitude, Centroid.Latitude, Range.Size
+
+## Challenge 1: One-Factor ANOVA and Inference
