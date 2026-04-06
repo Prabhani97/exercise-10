@@ -56,3 +56,543 @@ Categorical variables: Species1, Family1, Order1, Habitat, Trophic.Level,Trophic
 Numeric variables: Beak.Length_Culmen, Beak.Width, Beak.Depth,Tarsus.Length,Wing.Length,Tail.Length, Mass, Min.Latitude, Max.Latitude, Centroid.Latitude, Range.Size
 
 ## Challenge 1: One-Factor ANOVA and Inference
+
+### Step 01
+
+Making boxplots of log(Mass) in relation to Trophic.Level and Migration behavior type.
+
+First, converting Migration to a factor because 1, 2, 3 are categories, not continuous value,
+
+```{r}
+d <- d %>%
+  mutate(Migration = as.factor(Migration))
+
+```
+
+Then Let's draw the boxplot of log(Mass) by Trophic.Level,
+
+```{r}
+p1<- ggplot(
+  data = d %>% drop_na(Trophic.Level, Mass), # I am removing rows where the Trophic.Level or Mass is missing
+  aes(x = Trophic.Level, y = log(Mass))
+) +
+  geom_boxplot() +
+  geom_jitter(alpha = 0.1) +
+  labs(
+    title = "log(Mass) by Trophic Level",
+    x = "Trophic Level",
+    y = "log(Mass)"
+  )
+p1
+```
+
+Now, the boxplot of log(Mass) by Migration,
+
+```{r}
+p2<-ggplot(
+  data = d %>% drop_na(Migration, Mass),# doing the same removal for missing values
+  aes(x = Migration, y = log(Mass))
+) +
+  geom_boxplot() +
+  geom_jitter(alpha = 0.1) +
+  labs(
+    title = "log(Mass) by Migration Category",
+    x = "Migration",
+    y = "log(Mass)"
+  )
+
+p2
+```
+
+### Step 02
+
+Runnig linear models using the lm() function to look at the relationship between log(Mass) and Trophic.Level and between log(Mass) and Migration.
+
+```{r}
+# ANOVA as linear models with categorical predictors
+m_trophic <- lm(log(Mass) ~ Trophic.Level, data = d)
+m_migration <- lm(log(Mass) ~ Migration, data = d)
+
+summary(m_trophic)
+summary(m_migration)
+anova(m_trophic)
+anova(m_migration)
+```
+
+[Examining the output of the resultant linear models:]{.underline}
+
+Is log(Mass) associated with Trophic.Level? - Yes it is
+
+The global ANOVA result for log(Mass) \~ Trophic.Level was:
+
+F = 78.42 p \< 2.2e-16, So we reject the null hypothesis.
+
+Is log(Mass) associated with Migration? - Yes it is
+
+The global ANOVA result for log(Mass) \~ Migration was:
+
+F = 144.5 p \< 2.2e-16, So we reject the null hypothesis.
+
+[Reference level and coefficient interpretation for Migration]{.underline}
+
+Migration = 1 is the reference level when using the default factor coding.\
+\
+The approximate estimated coefficients were: Intercept = 3.775, Migration 2 = +0.760, Migration 3 = +0.376\
+\
+This tells that: Category 1's mean log (Mass) is the intercept, category 2's mean log (Mass) is much higher than category 1's, and category 3's mean log (Mass) is also significantly higher than category 1's.
+
+[Assessing differences among the remaining pair of Migration categories, for this i can make the Migration=3 as the reference level,]{.underline}
+
+```{r}
+d <- d %>%
+  mutate(Migration = relevel(Migration, ref = "3"))
+
+model_migration_reference3 <- lm(log(Mass) ~ Migration, data = d)
+summary(model_migration_reference3)
+```
+
+Using category 3 as a reference, I can see that the difference between categories 1 and 3 is roughly -0.376, the difference between categories 2 and 3 is roughly +0.383. Therefore, there are also certain amount of differences between categories 2 and 3.
+
+So, I can tell that, Migration and Trophic Level are both strongly correlated with log(Mass). Each of the three migration categories is distinct from the others.
+
+### Step 03
+
+[Tukey HSD for Migration]{.underline}
+
+Here I use aov(), to fit the ANOVA model in the standard ANOVA framework, And also for the post-hoc pairwise group comparisons i use TukeyHSD(),which I extracted from Module 20. According to that the TukeyHSD() function is run on the output of the ANOVA (aov()) function.
+
+```{r}
+model_migration_aov <- aov(log(Mass) ~ Migration, data = d)
+TukeyHSD(model_migration_aov)
+```
+
+All migration pairs differ considerably, according to the Tukey HSD test, which means 1 vs. 2: significant, 1 vs. 3: significant, 2 vs. 3: significant.
+
+### Step 4
+
+Using a permutation approach,
+
+First I need to inference to generate a null distribution of F statistic values from the model of log(Mass) in relation to Trophic.Level.
+
+So I am going to fit original model and get observed F staistic like above,
+
+```{r}
+observed_F <- aov(log(Mass) ~ Trophic.Level, data = d) %>%
+  broom::tidy() %>%
+  filter(term == "Trophic.Level")
+observed_F
+```
+
+Now from tge methid I know I can simulate no relationship by shuffling,
+
+```{r}
+d_perm <- d   # creating a copy of the dataset
+
+d_perm$Trophic.Level <- sample(d$Trophic.Level)
+```
+
+Recomputing F each time,
+
+```{r}
+aov(log(Mass) ~ Trophic.Level, data = d_perm)
+```
+
+Repeating 1000 times now,
+
+```{r}
+nperm <- 1000
+permuted.F <- vector(length = nperm)
+
+for (i in 1:nperm) {
+  d_perm <- d
+  d_perm$Trophic.Level <- sample(d$Trophic.Level)
+
+  permuted.F[i] <- aov(log(Mass) ~ Trophic.Level, data = d_perm) %>%
+    broom::tidy() %>%
+    filter(term == "Trophic.Level") %>%
+    pull(statistic)
+}
+```
+
+```{r}
+p.value <- mean(permuted.F >= observed_F$statistic)
+p.value
+```
+
+What I received is Real F = 78.22 Permutation p = 0.
+
+I did above assuming that there is no correlation between log(Mass) and Trophic.Level. None of the permuted F values were as large as the observed F statistic after this procedure was repeated 1000 times. This produced a permutation based p value of almost zero, telling me that the observed association is not by chance.
+
+## Challenge 2: Data Wrangling plus One- and Two-Factor ANOVA
+
+### Step 01
+
+I have to create two new variables and add them to AVONET dataset,
+
+-   **Relative beak length** -residual of log(Beak.Length_Culmen) on log(Mass).
+
+-   **Relative tarsus length**- residual of log(Tarsus.Length) on log(Mass). i can do this by taking residuals from the regression models on log(Mass), this is exactly what we did inside the class. But I am using resid() here for direct calculation,
+
+```{r}
+
+m_beak <- lm(log(Beak.Length_Culmen) ~ log(Mass), data = d)
+d$relBeak <- resid(m_beak)
+
+m_tarsus <- lm(log(Tarsus.Length) ~ log(Mass), data = d)
+d$relTarsus <- resid(m_tarsus)
+```
+
+### Step 02
+
+Plotting the new variables,
+
+Relative tarsus length by Primary.Lifestyle
+
+```{r}
+p1<- ggplot(
+  data = d %>% drop_na(relTarsus, Primary.Lifestyle),
+  aes(x = Primary.Lifestyle, y = relTarsus)
+) +
+  geom_boxplot() +
+  geom_jitter(alpha = 0.1) +
+  labs(
+    title = "Relative Tarsus Length by Primary Lifestyle",
+    x = "Primary Lifestyle",
+    y = "Relative Tarsus Length"
+  )
+p1
+```
+
+Relative beak length by Trophic.Niche
+
+```{r}
+p2<-ggplot(
+  data = d %>% drop_na(relBeak, Trophic.Niche),
+  aes(x = Trophic.Niche, y = relBeak)
+) +
+  geom_boxplot() +
+  geom_jitter(alpha = 0.1) +
+  labs(
+    title = "Relative Beak Length by Trophic Niche",
+    x = "Trophic Niche",
+    y = "Relative Beak Length"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p2
+```
+
+### Step 03
+
+Runnig ANOVA analyses to look at the association between geographic range size and the variable Migration.
+
+looking at the distribution of the variable Range.Size,
+
+```{r}
+hist(d$Range.Size, breaks = 40, main = "Range Size", xlab = "Range.Size")
+```
+
+This seems extremely right skewed, so it should be log-transformed.
+
+```{r}
+hist(log(d$Range.Size), breaks = 40, main = "log(Range Size)", xlab = "log(Range.Size)")
+
+```
+
+Now seems fine. And let's drop the invalid observations,
+
+```{r}
+d_range <- d %>%
+  drop_na(Range.Size, Migration)
+
+```
+
+And, now performing one-factor ANOVA,
+
+```{r}
+m_range <- aov(log(Range.Size) ~ Migration, data = d_range)
+summary(m_range)
+
+```
+
+The log-transformed range size varies considerably between migration groups, according to the one-way ANOVA. The null hypothesis that all migrant groups have the same mean range size is strongly shown by the extremely small p-value (\< 2.2e-16) and very large F-statistic (F = 520.3).\
+
+**Tukey HSD**
+
+```{r}
+TukeyHSD(m_range)
+```
+
+From the differences I can see above, I can further confirm the statistical significance of all pairwise comparisons between migration groups using the Tukey HSD post-hoc test like above.
+
+### Step 04
+
+First, making the original data to just consider birds from the Infraorder “Passeriformes” (song birds),
+
+```{r}
+d_passeriformes <- d %>%
+  filter(Order1 == "Passeriformes")
+```
+
+Now making boxplots for each predictor given,
+
+```{r}
+# relative beak length and Primary.Lifestyle
+ggplot(
+  data = d_passeriformes %>% drop_na(relBeak, Primary.Lifestyle),
+  aes(x = Primary.Lifestyle, y = relBeak)
+) +
+  geom_boxplot() +
+  geom_jitter(alpha = 0.1)
+
+# relative beak length and Trophic.Level
+ggplot(
+  data = d_passeriformes %>% drop_na(relBeak, Trophic.Level),
+  aes(x = Trophic.Level, y = relBeak)
+) +
+  geom_boxplot() +
+  geom_jitter(alpha = 0.1)
+```
+
+For, combination of predictors,
+
+```{r}
+ggplot(
+  data = d_passeriformes %>% drop_na(relBeak, Primary.Lifestyle, Trophic.Level),
+  aes(x = interaction(Primary.Lifestyle, Trophic.Level), y = relBeak)
+) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Now, running linear models for each predictor separately,
+
+```{r}
+model_passeriformes_life <- aov(relBeak ~ Primary.Lifestyle, data = d_passeriformes)
+model_passeriformes_troph <- aov(relBeak ~ Trophic.Level, data = d_passeriformes)
+
+summary(model_passeriformes_life)
+
+summary(model_passeriformes_troph)
+
+
+```
+
+Regarding relBeak \~ Primary.Lifestyle, F = 130.2 , p \< 2.2e-16\
+\
+Regarding relBeak \~ Trophic.Level, F = 174, p \< 2.2e-16\
+\
+When each predictor is taken into account independently, relative beak length among passeriform birds is highly correlated with both main lifestyle and trophic level.
+
+### Step 05
+
+Now i need to run a two-factor model to look at the association between relative beak length and both Primary.Lifestyle and Trophic.Level among the passeriforms.
+
+```{r}
+aov_two <- aov(relBeak ~ Primary.Lifestyle + Trophic.Level, data = d_passeriformes)
+summary(aov_two)
+```
+
+Relative beak length is greatly affected by both trophic level and main lifestyle. This implies that the variance in beak morphology is caused by each factor separately.
+
+### Step 06
+
+Now I need to run an additional two-way model with the same dataset and predictors, but adding the possibility of an interaction term,
+
+```{r}
+aov_interaction <- aov(relBeak ~ Primary.Lifestyle * Trophic.Level, data = d_passeriformes)
+summary(aov_interaction)
+```
+
+This below will do the same,
+
+```{r}
+aov_interaction <- aov(relBeak ~ Primary.Lifestyle + Trophic.Level + Primary.Lifestyle:Trophic.Level, data = d_passeriformes)
+summary(aov_interaction)
+```
+
+I can see both the methods of "relBeak \~ Primary.Lifestyle \* Trophic.Level" and suggested method in the exercise , which is "relBeak \~ Primary.Lifestyle + Trophic.Level + Primary.Lifestyle:Trophic.Level", giving the same results. And also from both,
+
+the main effect of Primary.Lifestyle is highly significant (F = 142.15, p \< 2e-16), indicating that mean relative beak length differs across lifestyle categories. Similarly, Trophic.Level shows an even stronger effect (F = 207.11, p \< 2e-16), suggesting substantial differences in relative beak length across trophic levels. The interaction between Primary.Lifestyle and Trophic.Level is also highly significant (F = 49.26, p \< 2e-16). This indicates that the effect of trophic level on relative beak length depends on the primary lifestyle category.
+
+### Step 07
+
+Visualizing the interaction between Primary.Lifestyle and Trophic.Level,
+
+1\) Using the interaction.plot() to visualize the interaction between Primary.Lifestyle and Trophic.Level, based on the raw dataset,
+
+```{r}
+interaction.plot(
+  x.factor = d_passeriformes$Primary.Lifestyle,
+  trace.factor = d_passeriformes$Trophic.Level,
+  response = d_passeriformes$relBeak,
+  fun = mean,
+  ylab = "Mean Relative Beak Length",
+  xlab = "Primary Lifestyle",
+  trace.label = "Trophic Level",
+  col = 1:3,
+  lwd = 2
+)
+
+```
+
+2\) Using plot_model() to visualize the interaction between Primary.Lifestyle and Trophic.Level, based on my model that includes an interaction term,
+
+```{r}
+plot_model(
+  aov_interaction,
+  type = "emm",
+  terms = c("Primary.Lifestyle", "Trophic.Level"))
+```
+
+### Step 08
+
+I need to check equal variance now,
+
+1\) doing this for the above final model of relative beak length \~ trophic level),
+
+```{r}
+d_passeriformes %>%
+  drop_na(relBeak, Trophic.Level) %>%
+  group_by(Trophic.Level) %>%
+  summarise(sd = sd(relBeak), n = n())
+```
+
+```{r}
+#max(sd) / min(sd)
+0.2574735	/0.1926917	
+```
+
+By comparing the standard deviations between groups, the assumption of equal variances was evaluated. The condition of equal variances appears to be reasonably satisfied because the ratio of the biggest to smallest standard deviation was less than 2.
+
+```{r}
+ggplot(
+  d_passeriformes %>% drop_na(relBeak, Trophic.Level),
+  aes(x = relBeak)
+) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~ Trophic.Level) +
+  labs(
+    title = "Distribution of Relative Beak Length within Trophic Levels",
+    x = "Relative Beak Length",
+    y = "Count"
+  )
+```
+
+According to above, Visual check of observations within groups looks like normal distributions.
+
+if we do a residual normality check too using Q-Q plots,
+
+```{r}
+aov_trophic <- aov(relBeak ~ Trophic.Level, data = d_passeriformes)
+
+hist(
+  resid(aov_trophic),
+  breaks = 30,
+  main = "Residuals: relBeak ~ Trophic.Level",
+  xlab = "Residuals"
+)
+
+qqnorm(resid(aov_trophic))
+qqline(resid(aov_trophic))
+```
+
+2\) Doing the same for the other models as well,
+
+[(I) relBeak \~ Primary.Lifestyle for passeriformes]{.underline}
+
+```{r}
+sd_lifestyle <- d_passeriformes %>%
+  drop_na(relBeak, Primary.Lifestyle) %>%
+  group_by(Primary.Lifestyle) %>%
+  summarise(
+    sd_relBeak = sd(relBeak),
+    n = n()
+  )
+
+sd_lifestyle
+
+max(sd_lifestyle$sd_relBeak) / min(sd_lifestyle$sd_relBeak)
+```
+
+```{r}
+ggplot(
+  d_passeriformes %>% drop_na(relBeak, Primary.Lifestyle),
+  aes(x = relBeak)
+) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~ Primary.Lifestyle) +
+  labs(
+    title = "Distribution of Relative Beak Length within Primary Lifestyle Groups",
+    x = "Relative Beak Length",
+    y = "Count"
+  )
+```
+
+```{r}
+aov_lifestyle <- aov(relBeak ~ Primary.Lifestyle, data = d_passeriformes)
+
+hist(
+  resid(aov_lifestyle),
+  breaks = 30,
+  main = "Residuals: relBeak ~ Primary.Lifestyle",
+  xlab = "Residuals"
+)
+
+qqnorm(resid(aov_lifestyle))
+qqline(resid(aov_lifestyle))
+```
+
+[(II) log(Range.Size) \~ Migration]{.underline}
+
+Equal variance check
+
+```{r}
+sd_migration <- d_range %>%
+  drop_na(Migration, Range.Size) %>%
+  group_by(Migration) %>%
+  summarise(
+    sd_logRange = sd(log(Range.Size)),
+    n = n()
+  )
+
+sd_migration
+
+max(sd_migration$sd_logRange) / min(sd_migration$sd_logRange)
+```
+
+```{r}
+ggplot(
+  d_range %>% drop_na(Migration, Range.Size),
+  aes(x = log(Range.Size))
+) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~ Migration) +
+  labs(
+    title = "Distribution of log(Range.Size) within Migration Groups",
+    x = "log(Range.Size)",
+    y = "Count"
+  )
+```
+
+```{r}
+aov_range <- aov(log(Range.Size) ~ Migration, data = d_range)
+
+hist(
+  resid(aov_range),
+  breaks = 30,
+  main = "Residuals: log(Range.Size) ~ Migration",
+  xlab = "Residuals"
+)
+
+qqnorm(resid(aov_range))
+qqline(resid(aov_range))
+```
+
+Above I did pretty much the same for the primary ANOVA models.
+
+I computed the ratio of the highest to smallest within group standard deviation for equal variance.
+
+The equal variance assumption appears to be fairly satisfied when ratios are less than 2.
+
+To determine whether distributions were roughly normal, the grouped I plotted histograms and model residuals.
