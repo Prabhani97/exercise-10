@@ -183,7 +183,7 @@ observed_F <- aov(log(Mass) ~ Trophic.Level, data = d) %>%
 observed_F
 ```
 
-Now from tge methid I know I can simulate no relationship by shuffling,
+Now from the methid I know I can simulate no relationship by shuffling,
 
 ```{r}
 d_perm <- d   # creating a copy of the dataset
